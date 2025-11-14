@@ -71,6 +71,20 @@ endif()
 set(CONAN_GENERATORS_DIR "${CMAKE_BINARY_DIR}/build/generators")
 list(PREPEND CMAKE_PREFIX_PATH "${CONAN_GENERATORS_DIR}")
 
+# 1. Définir une règle d'installation pour copier les assets
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/assets
+ DESTINATION .
+ FILES_MATCHING
+ PATTERN "*.*")
+# 2. Ajouter une cible personnalisée pour exécuter l'installation
+add_custom_target(copy_assets_to_runtime ALL
+ COMMAND ${CMAKE_COMMAND} --install . --prefix
+${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+ COMMENT "Installing assets to runtime directory"
+)
+
+
+
 find_package(SFML 2.6.2 REQUIRED COMPONENTS system window graphics)
 
 find_package(GTest REQUIRED)

@@ -1,4 +1,4 @@
-add_executable(VampireSurvivor main.cpp)
+add_executable(VampireSurvivor main.cpp "game/game.cpp" "game/game.h" "menu/menu.cpp" "menu/menu.h")
 
 
 
