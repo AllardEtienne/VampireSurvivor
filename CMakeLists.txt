@@ -71,6 +71,8 @@ endif()
 set(CONAN_GENERATORS_DIR "${CMAKE_BINARY_DIR}/build/generators")
 list(PREPEND CMAKE_PREFIX_PATH "${CONAN_GENERATORS_DIR}")
 
+find_package(SFML 2.6.2 REQUIRED COMPONENTS system window graphics)
+
 find_package(GTest REQUIRED)
 enable_testing()
 
