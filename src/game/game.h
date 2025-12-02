@@ -1,5 +1,11 @@
-// nomfichier.hpp
-#ifndef <"game.h">
-#define <"game.h">
-// Contenu du fichier d'en-tête
-#endif // UTILS_HPP
+#pragma once
+#include "game_export.h"
+#include <stdexcept>
+#include <expected>
+
+namespace game::ui
+{
+GAME_EXPORT __declspec(dllexport) std::expected<int, std::string> runGame();
+
+
+}; 
