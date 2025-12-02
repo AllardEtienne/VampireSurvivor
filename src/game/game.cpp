@@ -1,10 +1,37 @@
 #include "game/game.h"
 #include "common/common.h"
-#include <SFML/Graphics.hpp>
+
 
 namespace game::ui
 {
 int widthWindow = 800, heightWindow = 600;
+
+void moveUp(sf::Sprite& sprite)
+{
+    sprite.move(0.f, -5.f);
+    sprite.setTextureRect(sf::IntRect(0, 352, 32, 32));
+}
+void moveDown(sf::Sprite& sprite)
+{
+    sprite.move(0.f, 5.f);
+    sprite.setTextureRect(sf::IntRect(0, 160, 32, 32));
+}
+void moveLeft(sf::Sprite& sprite)
+{
+    sprite.move(-5.f, 0.f);
+    sprite.setTextureRect(sf::IntRect(0, 224, 32, 32));
+}
+void moveRight(sf::Sprite& sprite)
+{
+    sprite.move(5.f, 0.f);
+    sprite.setTextureRect(sf::IntRect(0, 288, 32, 32));
+}
+void idle(sf::Sprite& sprite)
+{
+    sprite.setTextureRect(sf::IntRect(0, 0, 32, 32));
+}
+
+
 
  std::expected<int, std::string> runGame()
 {
@@ -16,8 +43,9 @@ int widthWindow = 800, heightWindow = 600;
 
     playerTexture.setSmooth(true);
     sf::Sprite playerSprite;
-    playerSprite.setTextureRect(sf::IntRect(10, 10, 32, 32));
     playerSprite.setTexture(playerTexture);
+    playerSprite.setTextureRect(sf::IntRect(0, 0, 32, 32));
+    playerSprite.setScale(2.f, 2.f);
     playerSprite.setPosition(widthWindow / 2.f, heightWindow / 2.f);
     
 
@@ -26,6 +54,9 @@ int widthWindow = 800, heightWindow = 600;
     // Création d'une fenêtre "render"
     sf::RenderWindow window(sf::VideoMode(widthWindow, heightWindow), "VampireSurvivor",
                             sf::Style::Default); // Pour un style personnalisé
+    
+    window.setFramerateLimit(60);
+
 
     // Boucle principale avec gestion frame par frame
     while (window.isOpen())
@@ -48,21 +79,25 @@ int widthWindow = 800, heightWindow = 600;
                     window.close();
                     return std::unexpected("fermeture de la fenetre avec echap");
                 }
-                else if (event.key.code == sf::Keyboard::D)
+                else if (event.key.code == sf::Keyboard::D or event.key.code == sf::Keyboard::Right)
                 {
-                    playerSprite.move(10.f, 0.f);
+                    moveRight(playerSprite);
                 }
-                else if (event.key.code == sf::Keyboard::Q)
+                else if (event.key.code == sf::Keyboard::Q or event.key.code == sf::Keyboard::Left)
                 {
-                    playerSprite.move(-10.f, 0.f);
+                    moveLeft(playerSprite);
                 }
-                else if (event.key.code == sf::Keyboard::Z)
+                else if (event.key.code == sf::Keyboard::Z or event.key.code == sf::Keyboard::Up)
                 {
-                    playerSprite.move(0.f, -10.f);
+                    moveUp(playerSprite);
                 }
-                else if (event.key.code == sf::Keyboard::S)
+                else if (event.key.code == sf::Keyboard::S or event.key.code == sf::Keyboard::Down)
                 {
-                    playerSprite.move(0.f, 10.f);
+                    moveDown(playerSprite);
+                }
+                else
+                {
+                    idle(playerSprite);
                 }
             }
 
