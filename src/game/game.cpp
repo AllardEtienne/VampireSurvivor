@@ -13,7 +13,7 @@ enum class direction
 
 namespace game::ui
 {
-int widthWindow = 800, heightWindow = 600;
+int widthWindow = 1000, heightWindow = 800;
 
 void moveUp(sf::Sprite& sprite)
 {
@@ -32,15 +32,125 @@ void moveRight(sf::Sprite& sprite)
     sprite.move(5.f, 0.f);
 }
 
+void spawnEnemy(float& y, float& x)
+{
+    float spawn = common::random_float(0.f, 4.f);
+
+    if (spawn < 1.f)
+    {
+        // Haut
+        y = 0;
+        x = common::random_float(0, widthWindow);
+    }
+    else if (spawn < 2.f)
+    {
+        // Bas
+        y = heightWindow;
+        x = common::random_float(0, widthWindow);
+    }
+    else if (spawn < 3.f)
+    {
+        // Gauche
+        x = 0;
+        y = common::random_float(0, heightWindow);
+    }
+    else
+    {
+        // Droite
+        x = widthWindow;
+        y = common::random_float(0, heightWindow);
+    }
+}
+
+void projectileDestination(float& yDestination, float& xDestination, float ySpawn, float xSpawn)
+{
+    if (ySpawn == 0.f)
+    {
+        // Haut
+        yDestination = heightWindow;
+    }
+    else if (ySpawn == heightWindow)
+    {
+        // Bas
+        yDestination = 0.f;
+    }
+    else if (ySpawn >=0 and ySpawn <= heightWindow)
+    {
+        yDestination = common::random_float(0, heightWindow);
+    }
+    
+    if (xSpawn == 0.f)
+    {
+        // Gauche
+        xDestination = widthWindow;
+    }
+    else if (xSpawn == widthWindow)
+    {
+        // Droite
+        xDestination = 0.f;
+    }
+    else if (xSpawn >=0 and xSpawn <= widthWindow)
+    {
+        xDestination = common::random_float(0, widthWindow);
+    }
+}
+
+
+void shootProjectile(std::vector<common::Ennemy>& projectiles, int count = 1, sf::Color colors = sf::Color::White)
+{
+    float y;
+    float x;
+    float yDestination = heightWindow / 2.f;
+    float xDestination = widthWindow / 2.f;
+    const float radius = 25.f;
+    const float spacing = 10.f;                     // espacement horizontal entre projectiles
+
+    // Prendre un peu d'avance pour éviter reallocation fréquente si on tire beaucoup
+    if (projectiles.capacity() < projectiles.size() + count)
+        projectiles.reserve(projectiles.size() + count);
+    
+    for (int i = 0; i < count; ++i)
+    {
+        spawnEnemy(y, x);
+        projectileDestination(yDestination, xDestination, y, x);
+        sf::CircleShape proj(radius);
+        proj.setFillColor(colors);
+        proj.setPosition(x, y);
+        common::Ennemy p(y, x, yDestination, xDestination, proj);
+        projectiles.emplace_back(std::move(p));
+    }
+}
+
+void moveTo(std::vector<common::Ennemy>& projectiles, float speed)
+{
+    for (auto& projectile : projectiles)
+    {
+        projectile.moveTowardsDestination(speed);
+    }
+}
+
+
+
 
 
  std::expected<int, std::string> runGame()
 {
+     float yDestination;
+     float xDestination;
+     spawnEnemy(yDestination, xDestination);
+
+
      direction lastDirection = direction::Idle;
      direction currentDirection = direction::Idle;
      direction lookingDirection = direction::Down;
      int frameCounter = 0;
      
+     std::vector<common::Ennemy> projectiles;
+     
+     shootProjectile(projectiles, 10, sf::Color::Red);
+
+     std::vector<common::Ennemy> ennemies;
+     shootProjectile(ennemies, 5, sf::Color::Blue);
 
     sf::Texture playerTexture;
     if (!playerTexture.loadFromFile("assets/player.png"))
@@ -111,9 +221,57 @@ void moveRight(sf::Sprite& sprite)
                 }
             }
 
-
-            // D'autres évènements peuvent être gérés ici
         }
+        for (auto& ennemy : ennemies)
+        {
+            ennemy.changeDestination(playerSprite.getPosition().y, playerSprite.getPosition().x);
+        }
+        moveTo(ennemies, 2.f);
+        moveTo(projectiles, 1.f);
+
+        for (auto it = projectiles.begin(); it != projectiles.end();)
+        {
+            if (it->destination_reached())
+            {
+                it = projectiles.erase(it); // erase retourne l’itérateur suivant
+                //shootProjectile(projectiles, 1, sf::Color::Red);
+            }
+            else if (it->getPosition().x < playerSprite.getPosition().x + 25 and
+                     it->getPosition().x > playerSprite.getPosition().x - 25 and
+                     it->getPosition().y < playerSprite.getPosition().y + 25 and
+                     it->getPosition().y > playerSprite.getPosition().y - 25)
+                {
+                    it = projectiles.erase(it); // erase retourne l’itérateur suivant
+                    //shootProjectile(projectiles, 1, sf::Color::Red);
+                }
+            else
+            {
+                ++it;
+            }
+        }
+
+        for (auto it = ennemies.begin(); it != ennemies.end();)
+        {
+            if (it->destination_reached())
+            {
+                it = ennemies.erase(it); // erase retourne l’itérateur suivant
+                //shootProjectile(ennemies, 1, sf::Color::Blue);
+            }
+            else if (it->getPosition().x < playerSprite.getPosition().x + 25 and
+                     it->getPosition().x > playerSprite.getPosition().x - 25 and
+                     it->getPosition().y < playerSprite.getPosition().y + 25 and
+                     it->getPosition().y > playerSprite.getPosition().y - 25)
+                {
+                    it = ennemies.erase(it); // erase retourne l’itérateur suivant
+                    //shootProjectile(ennemies, 1, sf::Color::Blue);
+                }
+            else
+            {
+                ++it;
+            }
+        }
+
+
 
         // Effacement de l'ancienne frame (framebuffer)
         window.setVerticalSyncEnabled(true);
@@ -172,6 +330,17 @@ void moveRight(sf::Sprite& sprite)
 
 
         window.draw(playerSprite);
+
+
+        for (const auto& projectile : projectiles)
+        {
+            projectile.drawEnnemy(window);
+        }
+        for (const auto& ennemy : ennemies)
+        {
+            ennemy.drawEnnemy(window);
+        }
+
 
         // Affiche la nouvelle frame à l'écran
         window.display();

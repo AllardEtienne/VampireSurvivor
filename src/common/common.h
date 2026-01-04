@@ -9,7 +9,30 @@ COMMON_EXPORT void center_horizontally(const auto& parent, auto& child);
 
 COMMON_EXPORT void center_vertically(const auto& parent, auto& child);
 
- 
+COMMON_EXPORT float random_float(float min, float max);
+
+class COMMON_EXPORT Ennemy
+{
+    private:
+    float y;
+    float x;
+    float yDestination;
+    float xDestination;
+    sf::CircleShape shape;
+
+    public:
+    Ennemy(float initY, float initX, float initYDestination, float initXDestination, sf::CircleShape initShape);
+    Ennemy();
+    void drawEnnemy(sf::RenderWindow& window) const;
+    void changeDestination(float newYDestination, float newXDestination);
+    void moveTowardsDestination(float speed);
+    bool destination_reached();
+    sf::Vector2f getPosition();
+    
+
+
+};
+
 class COMMON_EXPORT Button
 {
 private:
