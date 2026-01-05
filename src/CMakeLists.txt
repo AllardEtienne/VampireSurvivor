@@ -1,5 +1,43 @@
 include(GenerateExportHeader)
 
+add_library(ecs SHARED
+    "ecs/internal/component_manager.cpp"
+    "ecs/internal/entity_manager.cpp"
+    "ecs/internal/system_manager.cpp")
+
+add_library(lib::ecs ALIAS ecs)
+
+target_include_directories(ecs
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+generate_export_header(ecs
+    BASE_NAME        ECS
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/ecs/export.h
+)
+
+add_executable(ecs_tests
+    ecs/tests/core_suitetests.cpp)
+
+target_link_libraries(ecs_tests
+    PRIVATE
+        lib::ecs
+        GTest::gtest
+        GTest::gtest_main
+)
+
+add_executable(ecs_tests_new
+    ecs/tests/core_suitetests_new.cpp)
+
+target_link_libraries(ecs_tests_new
+    PRIVATE
+        lib::ecs
+        GTest::gtest
+        GTest::gtest_main
+        sfml::sfml
+)
 
 # Create a library target called 'common'
 add_library(common SHARED
@@ -67,6 +105,7 @@ generate_export_header(game_ui
     BASE_NAME        GAME
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/game_export.h
 )
+
 
 
 
