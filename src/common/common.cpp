@@ -3,6 +3,8 @@
 
 namespace common
 {
+
+
 void center_horizontally(const auto& parent, auto& child)
 {
     const auto parentBoundingBox = parent.getLocalBounds();
@@ -148,7 +150,6 @@ void Button::changeAllColor(sf::Color newColor)
     changeTextColor(newColor);
     changeBackgroundColor(newColor);
 }
-
 
 
 } // namespace common

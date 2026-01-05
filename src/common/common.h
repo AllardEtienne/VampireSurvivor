@@ -5,6 +5,11 @@
 
 namespace common
 {
+struct VectorMe
+{
+    float x{}, y{};
+};
+
 COMMON_EXPORT void center_horizontally(const auto& parent, auto& child);
 
 COMMON_EXPORT void center_vertically(const auto& parent, auto& child);

@@ -97,7 +97,7 @@ target_include_directories(game_ui
 )
 
 target_link_libraries(game_ui 
-            PUBLIC sfml::sfml common
+            PUBLIC sfml::sfml common lib::ecs
 )
 
 set_target_properties(game_ui PROPERTIES DEFINE_SYMBOL GAME_WINDOW_EXPORTS)
@@ -111,6 +111,6 @@ generate_export_header(game_ui
 
 add_executable(VampireSurvivor main.cpp)
 
-target_link_libraries(VampireSurvivor PUBLIC sfml::sfml menu_ui game_ui
+target_link_libraries(VampireSurvivor PUBLIC sfml::sfml menu_ui game_ui lib::ecs
 # ou selon les besoins : sfml-system sfml-window sfml-graphics ...
 )
