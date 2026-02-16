@@ -3,17 +3,11 @@
 #include <stdexcept>
 #include <expected>
 #include <SFML/Graphics.hpp>
+#include "common/common.h"
 
 namespace game::ui
 {
+int widthWindow = 1000, heightWindow = 800;
+int numberOfEnnemies = 5, numberOfProjectile = 10;
 GAME_EXPORT __declspec(dllexport) std::expected<int, std::string> runGame();
-
-GAME_EXPORT void moveUp(sf::Sprite& sprite);
-GAME_EXPORT void moveDown(sf::Sprite& sprite);
-GAME_EXPORT void moveLeft(sf::Sprite& sprite);
-GAME_EXPORT void moveRight(sf::Sprite& sprite);
-GAME_EXPORT void shootProjectile(std::vector<sf::CircleShape>& projectile, int count, sf::Color colors);
-GAME_EXPORT void moveTo(std::vector<sf::CircleShape>& projectiles, float speed);
-
-
 }; 

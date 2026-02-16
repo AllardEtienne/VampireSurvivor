@@ -4,6 +4,17 @@
 #include "ecs/core.hpp"
 #include "ecs/internal/system_manager.hpp"
 
+#include <iostream>
+#include <algorithm> 
+
+enum class directionMe
+{
+    Up,
+    Down,
+    Left,
+    Right,
+    Idle
+};
 
 struct Position : public common::VectorMe
 {
@@ -11,12 +22,14 @@ struct Position : public common::VectorMe
 
 struct Motion
 {
-    float vx, vy;
+    float vx = 0.f;
+    float vy = 0.f;
+    float speed = 5.f;
 };
 
 struct Hitbox
 {
-    sf::RectangleShape box;
+    float width, height;
 };
 
 struct RanderShape
@@ -25,24 +38,151 @@ struct RanderShape
     sf::Color color;
 };
 
+struct Direction
+{
+    directionMe dir;
+};
+
+struct follow
+{
+    ecs::Entity target;
+};
+
+class followSystem : public ecs::System
+{
+    public:
+    void updateFollow()
+    {
+        for (ecs::Entity entity : entities())
+        {
+            auto& pos = ecs::get_component<Position>(entity);
+            auto& mot = ecs::get_component<Motion>(entity);
+            auto& followC = ecs::get_component<follow>(entity);
+
+            auto& targetPos = ecs::get_component<Position>(followC.target);
+            float dx = targetPos.x - pos.x;
+            float dy = targetPos.y - pos.y;
+            float length = std::sqrt(dx * dx + dy * dy);
+            if (length > 0.f)
+            {
+                mot.vx = dx / length;
+                mot.vy = dy / length;
+            }
+            else
+            {
+                mot.vx = 0.f;
+                mot.vy = 0.f;
+            }
+        }
+    }
+};
+
+class inputSystem : public ecs::System
+{
+public:
+    void processInput(directionMe newDirection)
+    {
+        for (ecs::Entity entity : entities())
+        {
+            auto& direction = ecs::get_component<Direction>(entity);
+            auto& motion = ecs::get_component<Motion>(entity);
+            direction.dir = newDirection;
+
+            if (direction.dir == directionMe::Down)
+            {
+                motion.vx = 0.f;
+                motion.vy = 1.f;
+            }
+            else if (direction.dir == directionMe::Up)
+            {
+                motion.vx = 0.f;
+                motion.vy = -1.f;
+            }
+            else if (direction.dir == directionMe::Right)
+            {
+                motion.vx = 1.f;
+                motion.vy = 0.f;
+            }
+            else if (direction.dir == directionMe::Left)
+            {
+                motion.vx = -1.f;
+                motion.vy = 0.f;
+            }
+            else if (direction.dir == directionMe::Idle)
+            {
+                motion.vx = 0.f;
+                motion.vy = 0.f;
+            }
+        }
+    }
+};
+
 class ColisionSystem : public ecs::System
 {
 public:
     bool CheckCollisions(ecs::Entity entityCheck)
     {
+        auto& posCheck = ecs::get_component<Position>(entityCheck);
+        auto& hbCheck = ecs::get_component<Hitbox>(entityCheck);
+
         for (ecs::Entity entity : entities())
         {
             if (entity == entityCheck)
                 continue;
-            auto& hitbox = ecs::get_component<Hitbox>(entity);
-            auto& hitboxCheck = ecs::get_component<Hitbox>(entityCheck);
-            if (hitbox.box.getGlobalBounds().intersects(hitboxCheck.box.getGlobalBounds()))
+
+            auto& pos = ecs::get_component<Position>(entity);
+            auto& hb = ecs::get_component<Hitbox>(entity);
+
+            bool collision = pos.x < posCheck.x + hbCheck.width && pos.x + hb.width > posCheck.x &&
+                             pos.y < posCheck.y + hbCheck.height && pos.y + hb.height > posCheck.y;
+
+            if (collision)
             {
                 return true;
             }
         }
         return false;
     }
+
+    void CheckCillisionsRemove(ecs::Entity entityCheck)
+    {
+        auto& posCheck = ecs::get_component<Position>(entityCheck);
+        auto& hbCheck = ecs::get_component<Hitbox>(entityCheck);
+
+        for (ecs::Entity entity : entities())
+        {
+            if (entity == entityCheck)
+                continue;
+
+            auto& pos = ecs::get_component<Position>(entity);
+            auto& hb = ecs::get_component<Hitbox>(entity);
+
+            bool collision = pos.x < posCheck.x + hbCheck.width && pos.x + hb.width > posCheck.x &&
+                             pos.y < posCheck.y + hbCheck.height && pos.y + hb.height > posCheck.y;
+
+            if (collision)
+            {
+                ecs::destroy_entity(entity);
+            }
+        }
+        
+    }
+
+    void CheckQuitWindow( sf::RenderWindow& window)
+    {
+        for (ecs::Entity entity : entities())
+        {
+            auto& pos = ecs::get_component<Position>(entity);
+            auto& hb = ecs::get_component<Hitbox>(entity);
+            if (pos.x < 0.f || pos.x + hb.width > static_cast<float>(game::ui::widthWindow) ||
+                pos.y < 0.f || pos.y + hb.height > static_cast<float>(game::ui::heightWindow))
+            {
+                ecs::destroy_entity(entity);
+            }
+        }
+    }
+
+
 };
 
 class MovementSystem : public ecs::System
@@ -54,35 +194,9 @@ public:
         {
             auto& pos = ecs::get_component<Position>(entity);
             auto& mot = ecs::get_component<Motion>(entity);
-            pos.x += mot.vx;
-            pos.y += mot.vy;
-        }
-    }
-
-    void moveDestination(float yDestination, float xDestination)
-    {
-        for (ecs::Entity entity : entities())
-        {
-            auto& pos = ecs::get_component<Position>(entity);
-            auto& mot = ecs::get_component<Motion>(entity);
-
-            float dx = xDestination - pos.x;
-            float dy = yDestination - pos.y;
-            float dist2 = dx * dx + dy * dy;
-
-            const float eps = 1e-4f;
-            if (dist2 <= eps * eps)
-            {
-                // Proche de la destination : stopper le mouvement
-                mot.vx = 0.f;
-                mot.vy = 0.f;
-                continue;
-            }
-
-            float invDist = 1.0f / std::sqrt(dist2);
-            // Vitesse normalisée vers la destination (direction unitaire).
-            mot.vx = dx * invDist;
-            mot.vy = dy * invDist;
+            // Appliquer la translation en utilisant la direction normalisée multipliée par la vitesse.
+            pos.x += mot.vx * mot.speed;
+            pos.y += mot.vy * mot.speed;
         }
     }
 };
@@ -105,36 +219,9 @@ public:
 
 
 
-enum class direction
-{
-    Up,
-    Down,
-    Left,
-    Right,
-    Idle
-};
-
 
 namespace game::ui
 {
-int widthWindow = 1000, heightWindow = 800;
-
-void moveUp(sf::Sprite& sprite)
-{
-    sprite.move(0.f, -5.f);
-}
-void moveDown(sf::Sprite& sprite)
-{
-    sprite.move(0.f, 5.f);
-}
-void moveLeft(sf::Sprite& sprite)
-{
-    sprite.move(-5.f, 0.f);
-}
-void moveRight(sf::Sprite& sprite)
-{
-    sprite.move(5.f, 0.f);
-}
 
 void spawnPoint(float& y, float& x)
 {
@@ -142,116 +229,117 @@ void spawnPoint(float& y, float& x)
 
     if (spawn < 1.f)
     {
-        // Haut
-        y = 0;
-        x = common::random_float(0, widthWindow);
+        // Spawn en haut
+        y = 0.f;
+        x = common::random_float(0.f, std::max(0, widthWindow));
     }
     else if (spawn < 2.f)
     {
-        // Bas
-        y = heightWindow;
-        x = common::random_float(0, widthWindow);
+        // Spawn en bas
+        y = static_cast<float>(heightWindow - 50.0f);
+        x = common::random_float(0.f, std::max(0, widthWindow));
     }
     else if (spawn < 3.f)
     {
-        // Gauche
-        x = 0;
-        y = common::random_float(0, heightWindow);
+        // Spawn à gauche
+        x = 0.f;
+        y = common::random_float(0.f, std::max(0, heightWindow));
     }
     else
     {
-        // Droite
-        x = widthWindow;
-        y = common::random_float(0, heightWindow);
+        // Spawn à droite
+        x = static_cast<float>(widthWindow - 50.0f);
+        y = common::random_float(0.f, std::max(0, heightWindow));
     }
 }
 
-void projectileDestination(float& yDestination, float& xDestination, float ySpawn, float xSpawn)
+void projectileDestination(float& vx, float& vy, float xSpawn, float ySpawn)
 {
-    if (ySpawn == 0.f)
+    const float eps = 0.1f;
+    const float projSize = 50.0f;
+
+    float targetX = xSpawn;
+    float targetY = ySpawn;
+
+    if (xSpawn >= static_cast<float>(widthWindow) - projSize - eps) 
     {
-        // Haut
-        yDestination = heightWindow;
+        // Spawn droite -> viser gauche
+        targetX = 0.f;
+        targetY = common::random_float(0.f, static_cast<float>(heightWindow));
     }
-    else if (ySpawn == heightWindow)
+    else if (xSpawn <= eps) 
     {
-        // Bas
-        yDestination = 0.f;
+        // Spawn gauche -> viser droite
+        targetX = static_cast<float>(widthWindow);
+        targetY = common::random_float(0.f, static_cast<float>(heightWindow));
     }
-    else if (ySpawn >= 0 and ySpawn <= heightWindow)
+    else if (ySpawn <= eps) 
     {
-        yDestination = common::random_float(0, heightWindow);
+        // Spawn haut -> viser bas
+        targetY = static_cast<float>(heightWindow);
+        targetX = common::random_float(0.f, static_cast<float>(widthWindow));
+    }
+    else if (ySpawn >= static_cast<float>(heightWindow) - projSize - eps) 
+    {
+        // Spawn bas -> viser haut
+        targetY = 0.f;
+        targetX = common::random_float(0.f, static_cast<float>(widthWindow));
+    }
+    else
+    {
+        vx = 0.f;
+        vy = 0.f;
+        return;
     }
 
-    if (xSpawn == 0.f)
+    float dx = targetX - xSpawn;
+    float dy = targetY - ySpawn;
+    float length = std::sqrt(dx * dx + dy * dy);
+
+    if (length > 0.f)
     {
-        // Gauche
-        xDestination = widthWindow;
+        vx = (dx / length);
+        vy = (dy / length);
     }
-    else if (xSpawn == widthWindow)
+    else
     {
-        // Droite
-        xDestination = 0.f;
-    }
-    else if (xSpawn >= 0 and xSpawn <= widthWindow)
-    {
-        xDestination = common::random_float(0, widthWindow);
+        vx = 0.f;
+        vy = 0.f;
     }
 }
 
-void spawnEnnemy(std::vector<common::Ennemy>& projectiles, int count = 1, sf::Color colors = sf::Color::White)
+ecs::Entity spawnProjectile( sf::Color colors)
 {
-    float y;
-    float x;
-    float yDestination = heightWindow / 2.f;
-    float xDestination = widthWindow / 2.f;
-    const float radius = 25.f;
-    const float spacing = 10.f; // espacement horizontal entre projectiles
+    float y, x, vx, vy;
 
-    // Prendre un peu d'avance pour éviter reallocation fréquente si on tire beaucoup
-    if (projectiles.capacity() < projectiles.size() + count)
-        projectiles.reserve(projectiles.size() + count);
-
-    for (int i = 0; i < count; ++i)
-    {
         spawnPoint(y, x);
-        projectileDestination(yDestination, xDestination, y, x);
-        sf::CircleShape proj(radius);
-        proj.setFillColor(colors);
-        proj.setPosition(x, y);
-        common::Ennemy p(y, x, yDestination, xDestination, proj);
-        projectiles.emplace_back(std::move(p));
-    }
-}
-
-void spawnEnnemyBis(std::vector<ecs::Entity>& projectiles, int count = 1, sf::Color colors = sf::Color::White)
-{
-    float y;
-    float x;
-
-
-    for (int i = 0; i < count; ++i)
-    {
-        spawnPoint(y, x);
+        projectileDestination(vx, vy, x, y);
         ecs::Entity proj = ecs::create_entity();
+
         sf::RectangleShape shape(sf::Vector2f(50.f, 50.f));
         shape.setFillColor(colors);
-        shape.setPosition(y, x);
-        sf::RectangleShape box(sf::Vector2f(50.f, 50.f));
-        box.setPosition(y, x);
-        box.setFillColor(sf::Color::Transparent);
-        ecs::add_components(proj, Position{y, x}, Hitbox{box}, RanderShape{shape});
-        projectiles.emplace_back(proj);
-    }
+        shape.setPosition(x, y);
+
+        ecs::add_components(proj, Position{x, y}, Hitbox{50.f, 50.f}, RanderShape{shape, colors}, Motion{vx, vy, 3.0f});
+        return proj;
 }
 
-void moveTo(std::vector<common::Ennemy>& projectiles, float speed)
+ecs::Entity spawnEnnemy(sf::Color colors, ecs::Entity target)
 {
-    for (auto& projectile : projectiles)
-    {
-        projectile.moveTowardsDestination(speed);
-    }
+    float y, x;
+
+        spawnPoint(y, x);
+        ecs::Entity enemy = ecs::create_entity();
+
+        sf::RectangleShape shape(sf::Vector2f(50.f, 50.f));
+        shape.setFillColor(colors);
+        shape.setPosition(x, y);
+
+        ecs::add_components(enemy, Position{x, y},  Hitbox{50.f, 50.f}, RanderShape{shape, colors},  Motion{0.0f, 0.0f, 2.0f}, follow{target});
+        return enemy;
 }
+
+
 
 void registerSystems()
 {
@@ -259,6 +347,8 @@ void registerSystems()
     ecs::register_component<Motion>();
     ecs::register_component<Hitbox>();
     ecs::register_component<RanderShape>();
+    ecs::register_component<Direction>();
+    ecs::register_component<follow>();
 
     auto movement = std::make_shared<MovementSystem>();
     ecs::register_system<MovementSystem>(movement, ecs::create_signature<Position, Motion>());
@@ -269,29 +359,48 @@ void registerSystems()
     auto render = std::make_shared<RenderSystem>();
     ecs::register_system<RenderSystem>(render, ecs::create_signature<Position, RanderShape>());
 
+    auto input = std::make_shared<inputSystem>();
+    ecs::register_system<inputSystem>(input, ecs::create_signature<Direction, Motion>());
 
+    auto followS = std::make_shared<followSystem>();
+    ecs::register_system<followSystem>(followS, ecs::create_signature<Position, Motion, follow>());
 };
+
+/////////////
+//RUN GAME//
+///////////
 
 std::expected<int, std::string> runGame()
 {
     registerSystems();
 
-    float yDestination;
-    float xDestination;
-    spawnPoint(yDestination, xDestination);
-
-    direction lastDirection = direction::Idle;
-    direction currentDirection = direction::Idle;
-    direction lookingDirection = direction::Down;
+    directionMe lastDirection = directionMe::Idle;
+    directionMe currentDirection = directionMe::Idle;
+    directionMe lookingDirection = directionMe::Down;
     int frameCounter = 0;
+    
+    sf::RectangleShape playerShape;
+    playerShape.setFillColor(sf::Color::White);
+    playerShape.setSize(sf::Vector2f(50.f, 50.f));
+    playerShape.setPosition(widthWindow / 2.f, heightWindow / 2.f);
 
+
+    ecs::Entity player = ecs::create_entity();
+    ecs::add_components(player, Position{widthWindow / 2.f, heightWindow / 2.f}, Motion{0.f, 0.f}, Hitbox{50.f, 50.f},
+                        RanderShape{playerShape, sf::Color::White}, Direction{directionMe::Idle});
+
+    
+    // liste des projectiles
     std::vector<ecs::Entity> projectiles;
+    for (int i = 0; i < game::ui::numberOfProjectile; ++i)
+    projectiles.push_back(spawnProjectile(sf::Color::Red));
 
-    spawnEnnemyBis(projectiles, 10, sf::Color::Red);
+    std::vector<ecs::Entity> ennemies;
+    for (int i = 0; i < game::ui::numberOfEnnemies; ++i)
+    ennemies.push_back(spawnEnnemy(sf::Color::Blue , player));
 
-    std::vector<common::Ennemy> ennemies;
-    spawnEnnemy(ennemies, 5, sf::Color::Blue);
 
+    // TEXTURE PLAYER //
     sf::Texture playerTexture;
     if (!playerTexture.loadFromFile("assets/player.png"))
     {
@@ -302,6 +411,10 @@ std::expected<int, std::string> runGame()
     sf::Sprite playerSprite;
     playerSprite.setTexture(playerTexture);
     playerSprite.setPosition(widthWindow / 2.f, heightWindow / 2.f);
+    // FIN TEXTURE PLAYER //
+
+
+
 
     // Création d'une fenêtre
     sf::RenderWindow window(sf::VideoMode(widthWindow, heightWindow), "VampireSurvivor",
@@ -332,88 +445,75 @@ std::expected<int, std::string> runGame()
                 }
                 else if (event.key.code == sf::Keyboard::D or event.key.code == sf::Keyboard::Right)
                 {
-                    currentDirection = direction::Right;
-                    lookingDirection = direction::Right;
-                    moveRight(playerSprite);
+                    currentDirection = directionMe::Right;
+                    lookingDirection = directionMe::Right;
+                    ecs::get_system<inputSystem>()->processInput(directionMe::Right);
+
                 }
                 else if (event.key.code == sf::Keyboard::Q or event.key.code == sf::Keyboard::Left)
                 {
-                    currentDirection = direction::Left;
-                    lookingDirection = direction::Left;
-                    moveLeft(playerSprite);
+                    currentDirection = directionMe::Left;
+                    lookingDirection = directionMe::Left;
+                    ecs::get_system<inputSystem>()->processInput(directionMe::Left);
+
                 }
                 else if (event.key.code == sf::Keyboard::Z or event.key.code == sf::Keyboard::Up)
                 {
-                    currentDirection = direction::Up;
-                    lookingDirection = direction::Up;
-                    moveUp(playerSprite);
+                    currentDirection = directionMe::Up;
+                    lookingDirection = directionMe::Up;
+                    ecs::get_system<inputSystem>()->processInput(directionMe::Up);
+
                 }
                 else if (event.key.code == sf::Keyboard::S or event.key.code == sf::Keyboard::Down)
                 {
-                    currentDirection = direction::Down;
-                    lookingDirection = direction::Down;
-                    moveDown(playerSprite);
+                    currentDirection = directionMe::Down;
+                    lookingDirection = directionMe::Down;
+                    ecs::get_system<inputSystem>()->processInput(directionMe::Down);
+
                 }
                 else
                 {
-                    currentDirection = direction::Idle;
+                    currentDirection = directionMe::Idle;
+                    ecs::get_system<inputSystem>()->processInput(directionMe::Idle);
+
                 }
             }
         }
-        for (auto& ennemy : ennemies)
+
+
+        ecs::get_system<followSystem>()->updateFollow();
+
+        ecs::get_system<MovementSystem>()->updatePositions();
+
+        ecs::get_system<ColisionSystem>()->CheckQuitWindow(window);
+
+        auto cleanup_list = [&](std::vector<ecs::Entity> &list) {
+            list.erase(std::remove_if(list.begin(), list.end(), [](const ecs::Entity &e) {
+                return !ecs::has_component<Position>(e);
+            }), list.end());
+        };
+
+        cleanup_list(projectiles);
+        cleanup_list(ennemies);
+
+        ecs::get_system<ColisionSystem>()->CheckCillisionsRemove(player);
+
+        cleanup_list(projectiles);
+        cleanup_list(ennemies);
+
+        ecs::get_system<inputSystem>()->processInput(directionMe::Idle);
+
+
+        // respawn projectiles
+        if (projectiles.size() < game::ui::numberOfProjectile)
         {
-            ennemy.changeDestination(playerSprite.getPosition().y, playerSprite.getPosition().x);
+            projectiles.push_back(spawnProjectile(sf::Color::Red));
         }
-        moveTo(ennemies, 2.f);
-
-        for (auto& projectile : projectiles)
+        if (ennemies.size() < game::ui::numberOfEnnemies)
         {
-            ;
+            ennemies.push_back(spawnEnnemy(sf::Color::Blue, player));
         }
 
-        // moveTo(projectiles, 1.f);
-
-        // for (auto it = projectiles.begin(); it != projectiles.end();)
-        //{
-        //     if (it->destination_reached())
-        //     {
-        //         it = projectiles.erase(it); // erase retourne l’itérateur suivant
-        //         //spawnEnnemy(projectiles, 1, sf::Color::Red);
-        //     }
-        //     else if (it->getPosition().x < playerSprite.getPosition().x + 25 and
-        //              it->getPosition().x > playerSprite.getPosition().x - 25 and
-        //              it->getPosition().y < playerSprite.getPosition().y + 25 and
-        //              it->getPosition().y > playerSprite.getPosition().y - 25)
-        //         {
-        //             it = projectiles.erase(it); // erase retourne l’itérateur suivant
-        //             //spawnEnnemy(projectiles, 1, sf::Color::Red);
-        //         }
-        //     else
-        //     {
-        //         ++it;
-        //     }
-        // }
-
-        for (auto it = ennemies.begin(); it != ennemies.end();)
-        {
-            if (it->destination_reached())
-            {
-                it = ennemies.erase(it); // erase retourne l’itérateur suivant
-                // spawnEnnemy(ennemies, 1, sf::Color::Blue);
-            }
-            else if (it->getPosition().x < playerSprite.getPosition().x + 25 and
-                     it->getPosition().x > playerSprite.getPosition().x - 25 and
-                     it->getPosition().y < playerSprite.getPosition().y + 25 and
-                     it->getPosition().y > playerSprite.getPosition().y - 25)
-            {
-                it = ennemies.erase(it); // erase retourne l’itérateur suivant
-                // spawnEnnemy(ennemies, 1, sf::Color::Blue);
-            }
-            else
-            {
-                ++it;
-            }
-        }
 
         // Effacement de l'ancienne frame (framebuffer)
         window.setVerticalSyncEnabled(true);
@@ -430,37 +530,37 @@ std::expected<int, std::string> runGame()
             frameCounter = 0;
         }
 
-        if (currentDirection == direction::Right)
+        if (currentDirection == directionMe::Right)
         {
             playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 9, 32, 32));
         }
-        else if (currentDirection == direction::Left)
+        else if (currentDirection == directionMe::Left)
         {
             playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 7, 32, 32));
         }
-        else if (currentDirection == direction::Up)
+        else if (currentDirection == directionMe::Up)
         {
             playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 11, 32, 32));
         }
-        else if (currentDirection == direction::Down)
+        else if (currentDirection == directionMe::Down)
         {
             playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 5, 32, 32));
         }
-        else if (currentDirection == direction::Idle)
+        else if (currentDirection == directionMe::Idle)
         {
-            if (lookingDirection == direction::Right)
+            if (lookingDirection == directionMe::Right)
             {
                 playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 1, 32, 32));
             }
-            else if (lookingDirection == direction::Left)
+            else if (lookingDirection == directionMe::Left)
             {
                 playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 2, 32, 32));
             }
-            else if (lookingDirection == direction::Up)
+            else if (lookingDirection == directionMe::Up)
             {
                 playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 3, 32, 32));
             }
-            else if (lookingDirection == direction::Down)
+            else if (lookingDirection == directionMe::Down)
             {
                 playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 0, 32, 32));
             }
@@ -474,10 +574,6 @@ std::expected<int, std::string> runGame()
 
         ecs::get_system<RenderSystem>()->renderEntities(window);
 
-        for (const auto& ennemy : ennemies)
-        {
-            ennemy.drawEnnemy(window);
-        }
 
         // Affiche la nouvelle frame à l'écran
         window.display();

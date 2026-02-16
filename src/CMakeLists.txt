@@ -39,6 +39,28 @@ target_link_libraries(ecs_tests_new
         sfml::sfml
 )
 
+# Create a library target called 'button'
+add_library(button SHARED
+    common/button.cpp
+)
+
+target_include_directories(button 
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+target_link_libraries(button 
+            PUBLIC sfml::sfml
+)
+
+
+set_target_properties(button PROPERTIES DEFINE_SYMBOL BUTTON_EXPORTS)
+generate_export_header(button
+    BASE_NAME        BUTTON
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/button_export.h
+)
+
 # Create a library target called 'common'
 add_library(common SHARED
     common/common.cpp
@@ -62,8 +84,6 @@ generate_export_header(common
 )
 
 
-
-
 # Create a library target called 'menu_ui'
 add_library(menu_ui SHARED
     menu/menu.cpp
@@ -76,7 +96,7 @@ target_include_directories(menu_ui
 )
 
 target_link_libraries(menu_ui 
-            PUBLIC sfml::sfml common
+            PUBLIC sfml::sfml common button
 )
 
 set_target_properties(menu_ui PROPERTIES DEFINE_SYMBOL MENU_WINDOW_EXPORTS)
@@ -111,6 +131,6 @@ generate_export_header(game_ui
 
 add_executable(VampireSurvivor main.cpp)
 
-target_link_libraries(VampireSurvivor PUBLIC sfml::sfml menu_ui game_ui lib::ecs
+target_link_libraries(VampireSurvivor PUBLIC sfml::sfml menu_ui game_ui lib::ecs button
 # ou selon les besoins : sfml-system sfml-window sfml-graphics ...
 )
