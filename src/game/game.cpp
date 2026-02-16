@@ -32,20 +32,26 @@ struct Hitbox
     float width, height;
 };
 
-struct RanderShape
+struct Follow
 {
-    sf::RectangleShape shape;
-    sf::Color color;
+    ecs::Entity target;
+};
+
+struct Sprite
+{
+    sf::Sprite sprite;
+    int frameCounter = 0;
 };
 
 struct Direction
 {
-    directionMe dir;
+    directionMe currentDirection;
+    directionMe lastDirection;
+    directionMe movementDirection;
 };
 
-struct follow
+struct Enemy
 {
-    ecs::Entity target;
 };
 
 class followSystem : public ecs::System
@@ -57,7 +63,7 @@ class followSystem : public ecs::System
         {
             auto& pos = ecs::get_component<Position>(entity);
             auto& mot = ecs::get_component<Motion>(entity);
-            auto& followC = ecs::get_component<follow>(entity);
+            auto& followC = ecs::get_component<Follow>(entity);
 
             auto& targetPos = ecs::get_component<Position>(followC.target);
             float dx = targetPos.x - pos.x;
@@ -86,29 +92,33 @@ public:
         {
             auto& direction = ecs::get_component<Direction>(entity);
             auto& motion = ecs::get_component<Motion>(entity);
-            direction.dir = newDirection;
+            direction.movementDirection = newDirection;
 
-            if (direction.dir == directionMe::Down)
+            if (direction.movementDirection == directionMe::Down)
             {
                 motion.vx = 0.f;
                 motion.vy = 1.f;
+                direction.currentDirection = directionMe::Down;
             }
-            else if (direction.dir == directionMe::Up)
+            else if (direction.movementDirection == directionMe::Up)
             {
                 motion.vx = 0.f;
                 motion.vy = -1.f;
+                direction.currentDirection = directionMe::Up;
             }
-            else if (direction.dir == directionMe::Right)
+            else if (direction.movementDirection == directionMe::Right)
             {
                 motion.vx = 1.f;
                 motion.vy = 0.f;
+                direction.currentDirection = directionMe::Right;
             }
-            else if (direction.dir == directionMe::Left)
+            else if (direction.movementDirection == directionMe::Left)
             {
                 motion.vx = -1.f;
                 motion.vy = 0.f;
+                direction.currentDirection = directionMe::Left;
             }
-            else if (direction.dir == directionMe::Idle)
+            else if (direction.movementDirection == directionMe::Idle)
             {
                 motion.vx = 0.f;
                 motion.vy = 0.f;
@@ -200,19 +210,85 @@ public:
         }
     }
 };
-
-class RenderSystem : public ecs::System
+class RenderSystemEnemy : public ecs::System
 {
-public:
+    public:
     void renderEntities(sf::RenderWindow& window)
     {
         for (ecs::Entity entity : entities())
         {
-            auto& renderShape = ecs::get_component<RanderShape>(entity);
             auto& position = ecs::get_component<Position>(entity);
-            renderShape.shape.setPosition(position.x, position.y);
-            renderShape.shape.setFillColor(renderShape.color);
-            window.draw(renderShape.shape);
+            auto& sprite = ecs::get_component<Sprite>(entity);
+            int& frameCounter = sprite.frameCounter;
+
+            frameCounter++;
+            sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 0, 32, 32));
+            
+
+            sprite.sprite.setTextureRect(sf::IntRect(0, 0, 32, 32));
+            sprite.sprite.setScale(2.f, 2.f);
+            sprite.sprite.setPosition(position.x, position.y);
+
+            window.draw(sprite.sprite);
+        }
+    }
+};
+
+class RenderSystem : public ecs::System
+{
+public:
+
+    void renderEntities(sf::RenderWindow& window)
+    {
+        for (ecs::Entity entity : entities())
+        {
+            auto& position = ecs::get_component<Position>(entity);
+            auto& sprite = ecs::get_component<Sprite>(entity);
+            auto& direction = ecs::get_component<Direction>(entity);
+            directionMe currentDirection = direction.currentDirection;
+            directionMe lastDirection = direction.lastDirection;
+            int& frameCounter = sprite.frameCounter;
+
+
+            // Dessiner les éléments du menu
+            if (currentDirection == lastDirection)
+            {
+                frameCounter++;
+            }
+            else
+            {
+                frameCounter = 0;
+            }
+
+            if (currentDirection == directionMe::Right)
+            {
+                sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 4, 32, 32));
+            }
+            else if (currentDirection == directionMe::Left)
+            {
+                sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 3, 32, 32));
+            }
+            else if (currentDirection == directionMe::Up)
+            {
+                sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 2, 32, 32));
+            }
+            else if (currentDirection == directionMe::Down)
+            {
+                sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 1, 32, 32));
+            }
+            else if (currentDirection == directionMe::Idle)
+            {
+                sprite.sprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 0, 32, 32));
+            }
+            else
+
+            sprite.sprite.setTextureRect(sf::IntRect(0, 0, 32, 32));
+            sprite.sprite.setScale(2.f, 2.f);
+            sprite.sprite.setPosition(position.x, position.y);
+
+            window.draw(sprite.sprite);
+            direction.lastDirection = direction.currentDirection;
+
         }
     }
 };
@@ -308,21 +384,35 @@ void projectileDestination(float& vx, float& vy, float xSpawn, float ySpawn)
     }
 }
 
-ecs::Entity spawnProjectile( sf::Color colors)
+ecs::Entity spawnProjectile(sf::Color colors)
 {
+    static sf::Texture projTexture;
+
+    static bool loaded = false;
+    if (!loaded)
+    {
+        if (!projTexture.loadFromFile("assets/projSprite.png"))
+        {
+            std::cerr << "Erreur chargement proj" << std::endl;
+        }
+        projTexture.setSmooth(true);
+        loaded = true;
+    }
+
     float y, x, vx, vy;
+    spawnPoint(y, x);
+    projectileDestination(vx, vy, x, y);
 
-        spawnPoint(y, x);
-        projectileDestination(vx, vy, x, y);
-        ecs::Entity proj = ecs::create_entity();
+    ecs::Entity proj = ecs::create_entity();
 
-        sf::RectangleShape shape(sf::Vector2f(50.f, 50.f));
-        shape.setFillColor(colors);
-        shape.setPosition(x, y);
+    sf::Sprite projSprite;
+    projSprite.setTexture(projTexture);
 
-        ecs::add_components(proj, Position{x, y}, Hitbox{50.f, 50.f}, RanderShape{shape, colors}, Motion{vx, vy, 3.0f});
-        return proj;
+    ecs::add_components(proj, Position{x, y}, Hitbox{50.f, 50.f}, Sprite{projSprite}, Motion{vx, vy, 3.0f}, Enemy{});
+
+    return proj;
 }
+
 
 ecs::Entity spawnEnnemy(sf::Color colors, ecs::Entity target)
 {
@@ -335,7 +425,20 @@ ecs::Entity spawnEnnemy(sf::Color colors, ecs::Entity target)
         shape.setFillColor(colors);
         shape.setPosition(x, y);
 
-        ecs::add_components(enemy, Position{x, y},  Hitbox{50.f, 50.f}, RanderShape{shape, colors},  Motion{0.0f, 0.0f, 2.0f}, follow{target});
+        static sf::Texture enemyTexture;
+
+        if (!enemyTexture.loadFromFile("assets/enemySprite.png"))
+        {
+
+        }
+
+        enemyTexture.setSmooth(true);
+        sf::Sprite enemySprite;
+        enemySprite.setTexture(enemyTexture);
+        enemySprite.setPosition(widthWindow / 2.f, heightWindow / 2.f);
+
+        ecs::add_components(enemy, Position{x, y}, Hitbox{50.f, 50.f}, Sprite{enemySprite}, Motion{0.0f, 0.0f, 2.0f},
+                            Follow{target}, Enemy{});
         return enemy;
 }
 
@@ -346,9 +449,10 @@ void registerSystems()
     ecs::register_component<Position>();
     ecs::register_component<Motion>();
     ecs::register_component<Hitbox>();
-    ecs::register_component<RanderShape>();
     ecs::register_component<Direction>();
-    ecs::register_component<follow>();
+    ecs::register_component<Follow>();
+    ecs::register_component<Sprite>();
+    ecs::register_component<Enemy>();
 
     auto movement = std::make_shared<MovementSystem>();
     ecs::register_system<MovementSystem>(movement, ecs::create_signature<Position, Motion>());
@@ -357,13 +461,16 @@ void registerSystems()
     ecs::register_system<ColisionSystem>(colision, ecs::create_signature<Position, Hitbox>());
 
     auto render = std::make_shared<RenderSystem>();
-    ecs::register_system<RenderSystem>(render, ecs::create_signature<Position, RanderShape>());
+    ecs::register_system<RenderSystem>(render, ecs::create_signature<Position, Sprite, Direction>());
+
+    auto renderNoDir = std::make_shared<RenderSystemEnemy>();
+    ecs::register_system<RenderSystemEnemy>(renderNoDir, ecs::create_signature<Position, Sprite, Enemy>());
 
     auto input = std::make_shared<inputSystem>();
     ecs::register_system<inputSystem>(input, ecs::create_signature<Direction, Motion>());
 
     auto followS = std::make_shared<followSystem>();
-    ecs::register_system<followSystem>(followS, ecs::create_signature<Position, Motion, follow>());
+    ecs::register_system<followSystem>(followS, ecs::create_signature<Position, Motion, Follow>());
 };
 
 /////////////
@@ -373,36 +480,15 @@ void registerSystems()
 std::expected<int, std::string> runGame()
 {
     registerSystems();
-
-    directionMe lastDirection = directionMe::Idle;
-    directionMe currentDirection = directionMe::Idle;
-    directionMe lookingDirection = directionMe::Down;
-    int frameCounter = 0;
     
     sf::RectangleShape playerShape;
     playerShape.setFillColor(sf::Color::White);
     playerShape.setSize(sf::Vector2f(50.f, 50.f));
     playerShape.setPosition(widthWindow / 2.f, heightWindow / 2.f);
 
-
-    ecs::Entity player = ecs::create_entity();
-    ecs::add_components(player, Position{widthWindow / 2.f, heightWindow / 2.f}, Motion{0.f, 0.f}, Hitbox{50.f, 50.f},
-                        RanderShape{playerShape, sf::Color::White}, Direction{directionMe::Idle});
-
-    
-    // liste des projectiles
-    std::vector<ecs::Entity> projectiles;
-    for (int i = 0; i < game::ui::numberOfProjectile; ++i)
-    projectiles.push_back(spawnProjectile(sf::Color::Red));
-
-    std::vector<ecs::Entity> ennemies;
-    for (int i = 0; i < game::ui::numberOfEnnemies; ++i)
-    ennemies.push_back(spawnEnnemy(sf::Color::Blue , player));
-
-
     // TEXTURE PLAYER //
     sf::Texture playerTexture;
-    if (!playerTexture.loadFromFile("assets/player.png"))
+    if (!playerTexture.loadFromFile("assets/lolaSprite.png"))
     {
         return std::unexpected("Erreur lors du chargement de la texture");
     }
@@ -413,8 +499,19 @@ std::expected<int, std::string> runGame()
     playerSprite.setPosition(widthWindow / 2.f, heightWindow / 2.f);
     // FIN TEXTURE PLAYER //
 
+    ecs::Entity player = ecs::create_entity();
+    ecs::add_components(player, Position{widthWindow / 2.f, heightWindow / 2.f}, Motion{0.f, 0.f}, Hitbox{50.f, 50.f},
+                        Sprite{playerSprite}, Direction{directionMe::Idle});
 
+    
+    // liste des projectiles
+    std::vector<ecs::Entity> projectiles;
+    for (int i = 0; i < game::ui::numberOfProjectile; ++i)
+        projectiles.push_back(spawnProjectile(sf::Color::Red));
 
+    std::vector<ecs::Entity> ennemies;
+    for (int i = 0; i < game::ui::numberOfEnnemies; ++i)
+        ennemies.push_back(spawnEnnemy(sf::Color::Blue , player));
 
     // Création d'une fenêtre
     sf::RenderWindow window(sf::VideoMode(widthWindow, heightWindow), "VampireSurvivor",
@@ -443,43 +540,37 @@ std::expected<int, std::string> runGame()
                     window.close();
                     return std::unexpected("fermeture de la fenetre avec echap");
                 }
-                else if (event.key.code == sf::Keyboard::D or event.key.code == sf::Keyboard::Right)
-                {
-                    currentDirection = directionMe::Right;
-                    lookingDirection = directionMe::Right;
-                    ecs::get_system<inputSystem>()->processInput(directionMe::Right);
-
-                }
-                else if (event.key.code == sf::Keyboard::Q or event.key.code == sf::Keyboard::Left)
-                {
-                    currentDirection = directionMe::Left;
-                    lookingDirection = directionMe::Left;
-                    ecs::get_system<inputSystem>()->processInput(directionMe::Left);
-
-                }
-                else if (event.key.code == sf::Keyboard::Z or event.key.code == sf::Keyboard::Up)
-                {
-                    currentDirection = directionMe::Up;
-                    lookingDirection = directionMe::Up;
-                    ecs::get_system<inputSystem>()->processInput(directionMe::Up);
-
-                }
-                else if (event.key.code == sf::Keyboard::S or event.key.code == sf::Keyboard::Down)
-                {
-                    currentDirection = directionMe::Down;
-                    lookingDirection = directionMe::Down;
-                    ecs::get_system<inputSystem>()->processInput(directionMe::Down);
-
-                }
-                else
-                {
-                    currentDirection = directionMe::Idle;
-                    ecs::get_system<inputSystem>()->processInput(directionMe::Idle);
-
-                }
+                // On peut encore traiter des actions ponctuelles ici si besoin,
+                // mais le mouvement sera géré chaque frame par l'état réel du clavier.
             }
         }
 
+        // --- Gestion du mouvement par lecture en temps réel du clavier ---
+        directionMe currentInput = directionMe::Idle;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D) || sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
+        {
+            currentInput = directionMe::Right;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q) || sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
+        {
+            currentInput = directionMe::Left;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z) || sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
+        {
+            currentInput = directionMe::Up;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S) || sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
+        {
+            currentInput = directionMe::Down;
+        }
+        else
+        {
+            currentInput = directionMe::Idle;
+        }
+
+        // Appel chaque frame pour garantir l'arrêt quand on relâche la touche
+        ecs::get_system<inputSystem>()->processInput(currentInput);
+        // --- fin gestion input temps réel ---
 
         ecs::get_system<followSystem>()->updateFollow();
 
@@ -501,8 +592,6 @@ std::expected<int, std::string> runGame()
         cleanup_list(projectiles);
         cleanup_list(ennemies);
 
-        ecs::get_system<inputSystem>()->processInput(directionMe::Idle);
-
 
         // respawn projectiles
         if (projectiles.size() < game::ui::numberOfProjectile)
@@ -520,64 +609,13 @@ std::expected<int, std::string> runGame()
 
         window.clear(sf::Color::Green);
 
-        // Dessiner les éléments du menu
-        if (currentDirection == lastDirection)
-        {
-            frameCounter++;
-        }
-        else
-        {
-            frameCounter = 0;
-        }
-
-        if (currentDirection == directionMe::Right)
-        {
-            playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 9, 32, 32));
-        }
-        else if (currentDirection == directionMe::Left)
-        {
-            playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 7, 32, 32));
-        }
-        else if (currentDirection == directionMe::Up)
-        {
-            playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 11, 32, 32));
-        }
-        else if (currentDirection == directionMe::Down)
-        {
-            playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 5, 32, 32));
-        }
-        else if (currentDirection == directionMe::Idle)
-        {
-            if (lookingDirection == directionMe::Right)
-            {
-                playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 1, 32, 32));
-            }
-            else if (lookingDirection == directionMe::Left)
-            {
-                playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 2, 32, 32));
-            }
-            else if (lookingDirection == directionMe::Up)
-            {
-                playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 3, 32, 32));
-            }
-            else if (lookingDirection == directionMe::Down)
-            {
-                playerSprite.setTextureRect(sf::IntRect((frameCounter / 10) % 4 * 32, 32 * 0, 32, 32));
-            }
-        }
-        else
-
-            playerSprite.setTextureRect(sf::IntRect(0, 0, 32, 32));
-        playerSprite.setScale(2.f, 2.f);
-
-        window.draw(playerSprite);
-
+        ecs::get_system<RenderSystemEnemy>()->renderEntities(window);
         ecs::get_system<RenderSystem>()->renderEntities(window);
 
 
         // Affiche la nouvelle frame à l'écran
         window.display();
-        lastDirection = currentDirection;
+        
     };
     return 0;
 };
